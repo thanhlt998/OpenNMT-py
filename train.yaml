@@ -64,6 +64,7 @@ bert_decoder_init_context: True
 share_self_attn: True
 # tie_context_attn: True
 # share_feed_forward: True
+copy_attn: True
 
 # Regularization
 dropout: 0.1
@@ -73,8 +74,8 @@ label_smoothing: 0.1
 optim: bertadam
 learning_rate: 0.00005
 warmup_steps: 5000
-batch_type: tokens
-normalization: tokens
+batch_type: sents
+normalization: sents
 accum_count: 2
 batch_size: 8
 max_grad_norm: 0

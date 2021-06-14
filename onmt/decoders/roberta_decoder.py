@@ -45,9 +45,12 @@ class RobertaDecoderEmbeddings(nn.Module):
         self.LayerNorm = roberta_embeddings.LayerNorm
         self.dropout = roberta_embeddings.dropout
         self.padding_idx = roberta_embeddings.padding_idx
+        self.position_embedding_type = 'absolute'
+        self.position_ids = roberta_embeddings.position_ids
 
     def forward(
-            self, input_ids=None, token_type_ids=None, position_ids=None, inputs_embeds=None, past_key_values_length=0
+            self, input_ids=None, token_type_ids=None, position_ids=None, inputs_embeds=None, past_key_values_length=0,
+            step=None,
     ):
         if position_ids is None:
             if input_ids is not None:
@@ -58,13 +61,16 @@ class RobertaDecoderEmbeddings(nn.Module):
             else:
                 position_ids = self.create_position_ids_from_inputs_embeds(inputs_embeds)
 
+        if step is not None:
+            position_ids.fill_(step)
+
         if input_ids is not None:
             input_shape = input_ids.size()
         else:
             input_shape = inputs_embeds.size()[:-1]
 
         if token_type_ids is None:
-            token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=self.position_ids.device)
+            token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=position_ids.device)
 
         if inputs_embeds is None:
             inputs_embeds = self.word_lut(input_ids)
@@ -188,7 +194,7 @@ class RobertaDecoderLayer(nn.Module):
         query, attn = self.self_attn(inputs, inputs, inputs,
                                      mask=dec_mask,
                                      layer_cache=layer_cache,
-                                     type="self")
+                                     attn_type="self")
 
         query_norm = self.self_attn_norm(self.self_attn_drop(query) + inputs)
 
@@ -196,7 +202,7 @@ class RobertaDecoderLayer(nn.Module):
                                       query_norm,
                                       mask=src_pad_mask,
                                       layer_cache=layer_cache,
-                                      type="context")
+                                      attn_type="context")
 
         mid_norm = self.context_attn_norm(
             self.context_attn_drop(mid) + query_norm)
@@ -269,7 +275,7 @@ class RobertaDecoder(TransformerDecoder):
             # token_type=opt.roberta_decoder_token_type,
         )
 
-    def forward(self, tgt, memory_bank, memory_lengths=None, step=None,):
+    def forward(self, tgt, memory_bank, memory_lengths=None, step=None, with_align=None,):
         """
         See :obj:`onmt.modules.RNNDecoderBase.forward()`
         """
@@ -307,7 +313,7 @@ class RobertaDecoder(TransformerDecoder):
 
         # Process the result and update the attentions.
         dec_outs = output.transpose(0, 1).contiguous()
-        attn = attn.transpose(0, 1).contiguous()
+        attn = torch.mean(attn, dim=1,).transpose(0, 1).contiguous()
 
         attns = {"std": attn}
         if self._copy:

@@ -34,6 +34,8 @@ class RobertaEncoderEmbeddings(nn.Module):
         self.LayerNorm = roberta_embeddings.LayerNorm
         self.dropout = roberta_embeddings.dropout
         self.padding_idx = roberta_embeddings.padding_idx
+        self.position_embedding_type = 'absolute'
+        self.position_ids = roberta_embeddings.position_ids
 
     def forward(
             self, input_ids=None, token_type_ids=None, position_ids=None, inputs_embeds=None, past_key_values_length=0
@@ -53,7 +55,7 @@ class RobertaEncoderEmbeddings(nn.Module):
             input_shape = inputs_embeds.size()[:-1]
 
         if token_type_ids is None:
-            token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=self.position_ids.device)
+            token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=position_ids.device)
 
         if inputs_embeds is None:
             inputs_embeds = self.word_lut(input_ids)
@@ -153,7 +155,7 @@ class RobertaEncoder(EncoderBase):
             return_dict=None,
         )
 
-        last_hidden_state = encoder_outputs.last_hidden_state
+        last_hidden_state = encoder_outputs[0]
 
         return embedding_output, last_hidden_state.transpose(0, 1), lengths
 
@@ -215,7 +217,7 @@ class RobertaEncoder(EncoderBase):
         # positions we want to attend and -10000.0 for masked positions.
         # Since we are adding it to the raw scores before the softmax, this is
         # effectively the same as removing these entirely.
-        # extended_attention_mask = extended_attention_mask.to(dtype=self.dtype)  # fp16 compatibility
+        extended_attention_mask = extended_attention_mask.to(dtype=self.embeddings.word_lut.weight.dtype)  # fp16 compatibility
         extended_attention_mask = (1.0 - extended_attention_mask) * -10000.0
         return extended_attention_mask
 
