@@ -7,6 +7,8 @@ from torchtext.data import Field, RawField
 from onmt.constants import DefaultTokens
 from onmt.inputters.datareader_base import DataReaderBase
 
+from transformers import AutoTokenizer, RobertaTokenizer
+
 
 class TextDataReader(DataReaderBase):
     def read(self, sequences, side):
@@ -62,6 +64,14 @@ def _feature_tokenize(
         tokens = tokens[:truncate]
     if feat_delim is not None:
         tokens = [t.split(feat_delim)[layer] for t in tokens]
+    return tokens
+
+
+def _bert_tokenize(string, layer=0, truncate=None, bert_tokenizer: RobertaTokenizer = None,):
+    tokens = bert_tokenizer.tokenize(string)
+    segments_ids = [0] * len(tokens)
+    if layer == 1:
+        tokens = segments_ids
     return tokens
 
 
@@ -169,22 +179,57 @@ def text_fields(**kwargs):
     pad = kwargs.get("pad", DefaultTokens.PAD)
     bos = kwargs.get("bos", DefaultTokens.BOS)
     eos = kwargs.get("eos", DefaultTokens.EOS)
+    bert = kwargs.get("bert", None)
     truncate = kwargs.get("truncate", None)
     fields_ = []
     feat_delim = u"￨" if n_feats > 0 else None
-    for i in range(n_feats + 1):
-        name = base_name + "_feat_" + str(i - 1) if i > 0 else base_name
+    if bert is not None:
+        bert_tokenizer = AutoTokenizer.from_pretrained(bert)
         tokenize = partial(
-            _feature_tokenize,
-            layer=i,
+            _bert_tokenize,
+            layer=0,
             truncate=truncate,
-            feat_delim=feat_delim)
-        use_len = i == 0 and include_lengths
+            bert_tokenizer=bert_tokenizer,
+        )
         feat = Field(
-            init_token=bos, eos_token=eos,
-            pad_token=pad, tokenize=tokenize,
-            include_lengths=use_len)
-        fields_.append((name, feat))
+            pad_token=pad,
+            unk_token=bert_tokenizer.unk_token,
+            init_token=bert_tokenizer.bos_token,
+            eos_token=bert_tokenizer.eos_token,
+            tokenize=tokenize,
+            include_lengths=include_lengths,
+        )
+        fields_.append((base_name, feat))
+
+        tokenize = partial(
+            _bert_tokenize,
+            layer=1,
+            truncate=truncate,
+            bert_tokenizer=bert_tokenizer,
+        )
+
+        segments_ids = Field(
+            use_vocab=False,
+            tokenize=tokenize,
+            dtype=torch.long,
+            pad_token=0,
+            unk_token=None,
+        )
+        fields_.append(('segments_ids', segments_ids))
+    else:
+        for i in range(n_feats + 1):
+            name = base_name + "_feat_" + str(i - 1) if i > 0 else base_name
+            tokenize = partial(
+                _feature_tokenize,
+                layer=i,
+                truncate=truncate,
+                feat_delim=feat_delim)
+            use_len = i == 0 and include_lengths
+            feat = Field(
+                init_token=bos, eos_token=eos,
+                pad_token=pad, tokenize=tokenize,
+                include_lengths=use_len)
+            fields_.append((name, feat))
     assert fields_[0][0] == base_name  # sanity check
     field = TextMultiField(fields_[0][0], fields_[0][1], fields_[1:])
     return field

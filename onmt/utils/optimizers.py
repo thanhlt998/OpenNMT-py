@@ -10,6 +10,8 @@ import types
 import importlib
 from onmt.utils.misc import fn_args
 
+from transformers.optimization import AdamW
+
 
 def build_torch_optimizer(model, opt):
     """Builds the PyTorch optimizer.
@@ -77,6 +79,32 @@ def build_torch_optimizer(model, opt):
                  lr=opt.learning_rate,
                  betas=betas,
                  eps=1e-8)])
+    elif opt.optim == 'bertadam':
+        decay_params = []
+        no_decay_params = []
+        no_decay = ['bias', 'LayerNorm.bias', 'LayerNorm.weight']
+
+        for name, param in model.named_parameters():
+            if 'pooler' in name:
+                continue
+            if not any(nd in name for nd in no_decay):
+                decay_params.append(param)
+            elif any(nd in name for nd in no_decay):
+                no_decay_params.append(param)
+        grouped_parameters = [
+            {'params': decay_params, 'weight_decay': opt.bert_l2},
+            {'params': no_decay_params, 'weight_decay': 0.0}
+        ]
+        # warmup = Proportion of training to perform
+        # linear learning rate warmup for.
+        # warmup = opt.warmup_steps/opt.train_steps
+        # t_total = opt.bert_final_step if opt.bert_final_step != -1 \
+        #     else opt.train_steps
+        optimizer = AdamW(
+            grouped_parameters,
+            lr=opt.learning_rate,
+            betas=betas,
+        )
     elif opt.optim == 'fusedadam':
         # we use here a FusedAdam() copy of an old Apex repo
         optimizer = FusedAdam(

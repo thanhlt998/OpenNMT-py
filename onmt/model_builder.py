@@ -130,7 +130,10 @@ def build_decoder_with_embeddings(
     tgt_field = fields["tgt"]
     tgt_emb = build_embeddings(model_opt, tgt_field, for_encoder=False)
 
-    if share_embeddings:
+    if share_embeddings and model_opt.encoder_type != 'bert':
+        src_field = fields['src']
+        assert src_field.base_field.vocab == tgt_field.base_field.vocab, \
+            "preprocess with -share_vocab if you use share_embeddings"
         tgt_emb.word_lut.weight = src_emb.word_lut.weight
 
     # Build decoder.
@@ -260,7 +263,14 @@ def build_base_model(model_opt, fields, gpu, checkpoint=None, gpu_id=None):
             generator.linear.weight = model.decoder.embeddings.word_lut.weight
 
     # Load the model states from checkpoint or initialize them.
-    if checkpoint is None or model_opt.update_vocab:
+    if (
+        checkpoint is None or model_opt.update_vocab
+        and
+        (
+            model_opt.encoder_type != 'bert'
+            or model_opt.decoder_type != 'bert'
+        )
+    ):
         if model_opt.param_init != 0.0:
             for p in model.parameters():
                 p.data.uniform_(-model_opt.param_init, model_opt.param_init)
@@ -274,12 +284,92 @@ def build_base_model(model_opt, fields, gpu, checkpoint=None, gpu_id=None):
                 if p.dim() > 1:
                     xavier_uniform_(p)
 
-        if hasattr(model, "encoder") and hasattr(model.encoder, "embeddings"):
+        if (
+            hasattr(model, "encoder")
+            and hasattr(model.encoder, "embeddings")
+            and model_opt.encoder_type != 'bert'
+        ):
             model.encoder.embeddings.load_pretrained_vectors(
                 model_opt.pre_word_vecs_enc)
-        if hasattr(model.decoder, 'embeddings'):
+        if (
+            hasattr(model.decoder, 'embeddings')
+            and model_opt.decoder_type != 'bert'
+        ):
             model.decoder.embeddings.load_pretrained_vectors(
                 model_opt.pre_word_vecs_dec)
+
+    if model_opt.encoder_type == 'bert' or model_opt.decoder_type == 'bert':
+        if model_opt.bert_type != 'none':
+            model_opt.enc_bert_type = model_opt.bert_type
+            model_opt.dec_bert_type = model_opt.bert_type
+
+        if model_opt.enc_bert_type != 'none' and checkpoint is None:
+            model.encoder.initialize_bert(model_opt.enc_bert_type)
+
+        if model_opt.dec_bert_type != 'none' and checkpoint is None:
+            model.decoder.initialize_bert(model_opt.dec_bert_type)
+
+        # Tie word embedding layer of bert encoder and decoder
+        if model_opt.encoder_type == 'bert' and model_opt.share_embeddings:
+            model.decoder.embeddings.word_lut.weight = model.encoder.embeddings.word_lut.weight
+
+    if model_opt.encoder_type == 'bert' and model_opt.decoder_type == 'bert':
+        # Tie word, position and token_type embedding
+        # layers of encoder and decoder BERT
+        if model_opt.share_embeddings:
+            model.decoder.embeddings.position_embeddings.weight = model.encoder.embeddings.position_embeddings.weight
+            model.decoder.embeddings.token_type_embeddings.weight = model.encoder.embeddings.token_type_embeddings.weight
+
+        # Tie self-attention between encoder and decoder
+        if model_opt.share_self_attn:
+            for encoder_layer, decoder_layer in zip(
+                model.encoder.encoder.layer,
+                model.decoder.transformer_layers
+            ):
+                # query
+                clone_or_share_layer(
+                    decoder_layer.self_attn.linear_query,
+                    encoder_layer.attention.self.query,
+                    share=True,
+                )
+
+                # key
+                clone_or_share_layer(
+                    decoder_layer.self_attn.linear_keys,
+                    encoder_layer.attention.self.key,
+                    share=True,
+                )
+
+                # value
+                clone_or_share_layer(
+                    decoder_layer.self_attn.linear_values,
+                    encoder_layer.attention.self.value,
+                    share=True,
+                )
+
+                # multihead attn final linear layer
+                clone_or_share_layer(
+                    decoder_layer.self_attn.final_linear,
+                    encoder_layer.attention.output.dense,
+                    share=True,
+                )
+
+        # Tie positionwise feedforward between encoder and decoder
+        if model_opt.share_feed_forward:
+            for encoder_layer, decoder_layer in zip(
+                    model.encoder.encoder.layer,
+                    model.decoder.transformer_layers):
+
+                # TRANSFORMER FF
+                clone_or_share_layer(
+                    decoder_layer.intermediate.dense,
+                    encoder_layer.intermediate.dense,
+                    share=True)
+
+                clone_or_share_layer(
+                    decoder_layer.output.dense,
+                    encoder_layer.output.dense,
+                    share=True)
 
     if checkpoint is not None:
         # This preserves backward-compat for models using customed layernorm
@@ -315,3 +405,12 @@ def build_model(model_opt, opt, fields, checkpoint):
     model = build_base_model(model_opt, fields, use_gpu(opt), checkpoint)
     logger.info(model)
     return model
+
+
+def clone_or_share_layer(layer1, layer2, share=False):
+    if share:
+        layer1.weight, layer1.bias = layer2.weight, layer2.bias
+    else:
+        layer1.weight, layer1.bias = \
+            nn.Parameter(
+                layer2.weight.clone()), nn.Parameter(layer2.bias.clone())
