@@ -120,7 +120,9 @@ def get_fields(
     with_align=False,
     src_truncate=None,
     tgt_truncate=None,
-    data_task=ModelTask.SEQ2SEQ
+    data_task=ModelTask.SEQ2SEQ,
+    bert_src=None,
+    bert_tgt=None,
 ):
     """
     Args:
@@ -166,6 +168,18 @@ def get_fields(
         "truncate": src_truncate,
         "base_name": "src",
     }
+    if bert_src is not None:
+        src_field_kwargs = {
+            "n_feats": n_src_feats,
+            "include_lengths": True,
+            "pad": "<pad>",
+            "bos": None,
+            "eos": None,
+            "truncate": src_truncate,
+            "bert": bert_src,
+            "base_name": "src",
+        }
+
     fields["src"] = fields_getters[src_data_type](**src_field_kwargs)
 
     tgt_field_kwargs = {
@@ -177,6 +191,18 @@ def get_fields(
         "truncate": tgt_truncate,
         "base_name": "tgt",
     }
+    if bert_tgt is not None:
+        tgt_field_kwargs = {
+            "n_feats": n_tgt_feats,
+            "include_lengths": False,
+            "pad": "<pad>",
+            "bos": "<s>",
+            "eos": "</s>",
+            "truncate": tgt_truncate,
+            "bert": bert_tgt,
+            "base_name": "tgt",
+        }
+
     fields["tgt"] = fields_getters["text"](**tgt_field_kwargs)
 
     indices = Field(use_vocab=False, dtype=torch.long, sequential=False)
@@ -276,16 +302,31 @@ def _pad_vocab_to_multiple(vocab, multiple):
 
 
 def _build_field_vocab(field, counter, size_multiple=1, **kwargs):
-    # this is basically copy-pasted from torchtext.
-    all_special = [
-        field.unk_token, field.pad_token, field.init_token, field.eos_token
-    ]
-    all_special.extend(list(kwargs.pop('specials', [])))
-    specials = list(OrderedDict.fromkeys(
-        tok for tok in all_special if tok is not None))
-    field.vocab = field.vocab_cls(counter, specials=specials, **kwargs)
-    if size_multiple > 1:
-        _pad_vocab_to_multiple(field.vocab, size_multiple)
+    # TODO: consider code for BERT
+    if 'bert_tokenizer' in field.tokenize.keywords.keys():
+        vocab = field.tokenize.keywords['bert_tokenizer'].get_vocab()
+        # specials = ['<s>', '</s>', '<unk>', '<pad>', '<mask>',]
+        specials = field.tokenize.keywords['bert_tokenizer'].all_special_tokens
+        counter = Counter()
+        src_vocab_size = len(vocab)
+        logger.info(f'Bert vocab has {src_vocab_size} tokens')
+        vocab_items = [(k, v) for k, v in vocab.items() if k not in specials]
+        for i, token in enumerate(vocab_items):
+            # keep the order of tokens specified in the vocab file by
+            # adding them to the counter with decreasing counting values
+            counter[token[0]] = src_vocab_size - i
+        field.vocab = field.vocab_cls(counter, specials=specials, **kwargs)
+    else:
+        # this is basically copy-pasted from torchtext.
+        all_special = [
+            field.unk_token, field.pad_token, field.init_token, field.eos_token
+        ]
+        all_special.extend(list(kwargs.pop('specials', [])))
+        specials = list(OrderedDict.fromkeys(
+            tok for tok in all_special if tok is not None))
+        field.vocab = field.vocab_cls(counter, specials=specials, **kwargs)
+        if size_multiple > 1:
+            _pad_vocab_to_multiple(field.vocab, size_multiple)
 
 
 def _load_vocab(vocab_path, name, counters, min_freq=0):

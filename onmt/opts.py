@@ -159,6 +159,24 @@ def _add_dynamic_fields_opts(parser, build_vocab_only=False):
                   type=int, default=None,
                   help="Truncate target sequence length.")
 
+        group.add('--src_seq_length', '-src_seq_length', type=int, default=100,
+                  help="Maximum source sequence length")
+
+        group.add('--tgt_seq_length', '-tgt_seq_length', type=int, default=100,
+                  help="Maximum target sequence length")
+
+        group.add('--lower', '-lower', action='store_true', help="Lowercase data",)
+        group.add('--filter_valid', '-filter_valid', action='store_true',
+                  help="Filter validation data by src and/or tgt length")
+
+        group.add('--bert_src', '-bert_src', type=str, default=None,
+                  choices=['vinai/phobert-base'],
+                  help="Use bert preprocessing on src side")
+
+        group.add('--bert_tgt', '-bert_tgt', type=str, default=None,
+                  choices=['vinai/phobert-base'],
+                  help="User bert preprocessing on tgt side")
+
         group = parser.add_argument_group('Embeddings')
         group.add('-both_embeddings', '--both_embeddings',
                   help="Path to the embeddings file to use "
@@ -268,15 +286,48 @@ def model_opts(parser):
 
     group.add('--encoder_type', '-encoder_type', type=str, default='rnn',
               choices=['rnn', 'brnn', 'ggnn', 'mean', 'transformer', 'cnn',
-                       'transformer_lm'],
+                       'transformer_lm', 'roberta', ],
               help="Type of encoder layer to use. Non-RNN layers "
                    "are experimental. Options are "
                    "[rnn|brnn|ggnn|mean|transformer|cnn|transformer_lm].")
     group.add('--decoder_type', '-decoder_type', type=str, default='rnn',
-              choices=['rnn', 'transformer', 'cnn', 'transformer_lm'],
+              choices=['rnn', 'transformer', 'cnn', 'transformer_lm', 'roberat', ],
               help="Type of decoder layer to use. Non-RNN layers "
                    "are experimental. Options are "
                    "[rnn|transformer|cnn|transformer].")
+
+    group.add('--bert_type', '-bert_type', type=str, default='none',
+              choices=['none', 'vinai/phobert-base', ],
+              help="Roberta pretrained model")
+
+    group.add('--enc_bert_type', '-enc_bert_type', type=str, default='none',
+              choices=['none', 'vinai/phobert-base', ],
+              help="Roberta pretrained model for encoder")
+
+    group.add('--dec_bert_type', '-dec_bert_type', type=str, default='none',
+              choices=['none', 'vinai/phobert-base', ],
+              help="Roberta pretrained model for decoder")
+
+    group.add('--bert_decoder_init_context', '-bert_decoder_init_context',
+              action='store_true',
+              help="Initialize context attn with self attention weights.")
+
+    group.add('--share_self_attn', '-share_self_attn',
+              action='store_true',
+              help="Share encoder and decoder self attention weights.")
+
+    group.add('--tie_context_attn', '-tie_context_attn',
+              action='store_true',
+              help="Tie decoder self and context attention weights.")
+
+    group.add('--share_feed_forward', '-share_feed_forward',
+              action='store_true',
+              help="Share encoder and decoder positionwise feed forward weights.")
+
+    group.add('--bert_decoder_token_type', '-bert_decoder_token_type',
+              type=str, default='A',
+              choices=['A', 'B'],
+              help="Token type to use in segment embeddings in BertDecoder")
 
     group.add('--layers', '-layers', type=int, default=-1,
               help='Number of layers in enc/dec.')
@@ -540,7 +591,7 @@ def _add_train_general_opts(parser):
               help='Criteria to use for early stopping.')
     group.add('--optim', '-optim', default='sgd',
               choices=['sgd', 'adagrad', 'adadelta', 'adam',
-                       'sparseadam', 'adafactor', 'fusedadam'],
+                       'sparseadam', 'adafactor', 'fusedadam', 'bertadam',],
               help="Optimization method.")
     group.add('--adagrad_accumulator_init', '-adagrad_accumulator_init',
               type=float, default=0,
@@ -620,6 +671,15 @@ def _add_train_general_opts(parser):
               help="Use a custom decay rate.")
     group.add('--warmup_steps', '-warmup_steps', type=int, default=4000,
               help="Number of warmup steps for custom decay.")
+
+    group.add('--bert_schedule', '-bert_schedule', type=str,
+              default='warmup_linear',
+              choices=['warmup_constant', 'warmup_linear', 'warmup_cosine',],
+              help="Use a custom decay rate")
+    group.add('--bert_final_step', '-bert_final_step', type=int, default=-1,
+              help="Step in which schedule finished decaying.")
+    group.add('--bert_l2', '-bert_l2', type=float, default=0.01,
+              help="L2 norm used in bertadam")
     _add_logging_opts(parser, is_train=True)
 
 
