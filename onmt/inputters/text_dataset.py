@@ -9,6 +9,7 @@ from onmt.inputters.datareader_base import DataReaderBase
 
 from transformers import AutoTokenizer, RobertaTokenizer
 
+SPLIT_TOKEN = "<split>"
 
 class TextDataReader(DataReaderBase):
     def read(self, sequences, side):
@@ -132,6 +133,7 @@ class TextMultiField(RawField):
         feats = [ff.process(batch_by_feat[i], device=device)
                  for i, (_, ff) in enumerate(self.fields[1:], 1)]
         levels = [base_data] + feats
+        # print(feats)
         # data: seq_len x batch_size x len(self.fields)
         data = torch.stack(levels, 2)
         if self.base_field.include_lengths:
@@ -185,6 +187,7 @@ def text_fields(**kwargs):
     feat_delim = u"￨" if n_feats > 0 else None
     if bert is not None:
         bert_tokenizer = AutoTokenizer.from_pretrained(bert)
+        bert_tokenizer.add_tokens(SPLIT_TOKEN)
         tokenize = partial(
             _bert_tokenize,
             layer=0,

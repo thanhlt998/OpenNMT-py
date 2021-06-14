@@ -3,11 +3,12 @@ from onmt.decoders.decoder import DecoderBase, InputFeedRNNDecoder, \
     StdRNNDecoder
 from onmt.decoders.transformer import TransformerDecoder, TransformerLMDecoder
 from onmt.decoders.cnn_decoder import CNNDecoder
+from onmt.decoders.roberta_decoder import RobertaDecoder
 
 
 str2dec = {"rnn": StdRNNDecoder, "ifrnn": InputFeedRNNDecoder,
            "cnn": CNNDecoder, "transformer": TransformerDecoder,
-           "transformer_lm": TransformerLMDecoder}
+           "transformer_lm": TransformerLMDecoder, 'bert': RobertaDecoder,}
 
 __all__ = ["DecoderBase", "TransformerDecoder", "StdRNNDecoder", "CNNDecoder",
            "InputFeedRNNDecoder", "str2dec", "TransformerLMDecoder"]

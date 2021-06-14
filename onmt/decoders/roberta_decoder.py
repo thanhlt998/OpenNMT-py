@@ -19,6 +19,83 @@ def clone_or_share_layer(layer1, layer2, share=False):
                 layer2.weight.clone()), nn.Parameter(layer2.bias.clone())
 
 
+def create_position_ids_from_input_ids(input_ids, padding_idx, past_key_values_length=0):
+    """
+    Replace non-padding symbols with their position numbers. Position numbers begin at padding_idx+1. Padding symbols
+    are ignored. This is modified from fairseq's `utils.make_positions`.
+
+    Args:
+        x: torch.Tensor x:
+
+    Returns: torch.Tensor
+    """
+    # The series of casts and type-conversions here are carefully balanced to both work with ONNX export and XLA.
+    mask = input_ids.ne(padding_idx).int()
+    incremental_indices = (torch.cumsum(mask, dim=1).type_as(mask) + past_key_values_length) * mask
+    return incremental_indices.long() + padding_idx
+
+
+class RobertaDecoderEmbeddings(nn.Module):
+    def __init__(self, roberta_embeddings: RobertaEmbeddings):
+        super(RobertaDecoderEmbeddings, self).__init__()
+        self.word_lut = roberta_embeddings.word_embeddings
+        self.position_embeddings = roberta_embeddings.position_embeddings
+        self.token_type_embeddings = roberta_embeddings.token_type_embeddings
+
+        self.LayerNorm = roberta_embeddings.LayerNorm
+        self.dropout = roberta_embeddings.dropout
+        self.padding_idx = roberta_embeddings.padding_idx
+
+    def forward(
+            self, input_ids=None, token_type_ids=None, position_ids=None, inputs_embeds=None, past_key_values_length=0
+    ):
+        if position_ids is None:
+            if input_ids is not None:
+                # Create the position ids from the input token ids. Any padded tokens remain padded.
+                position_ids = create_position_ids_from_input_ids(
+                    input_ids, self.padding_idx, past_key_values_length
+                ).to(input_ids.device)
+            else:
+                position_ids = self.create_position_ids_from_inputs_embeds(inputs_embeds)
+
+        if input_ids is not None:
+            input_shape = input_ids.size()
+        else:
+            input_shape = inputs_embeds.size()[:-1]
+
+        if token_type_ids is None:
+            token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=self.position_ids.device)
+
+        if inputs_embeds is None:
+            inputs_embeds = self.word_lut(input_ids)
+        token_type_embeddings = self.token_type_embeddings(token_type_ids)
+
+        embeddings = inputs_embeds + token_type_embeddings
+        if self.position_embedding_type == "absolute":
+            position_embeddings = self.position_embeddings(position_ids)
+            embeddings += position_embeddings
+        embeddings = self.LayerNorm(embeddings)
+        embeddings = self.dropout(embeddings)
+        return embeddings
+
+    def create_position_ids_from_inputs_embeds(self, inputs_embeds):
+        """
+        We are provided embeddings directly. We cannot infer which are padded so just generate sequential position ids.
+
+        Args:
+            inputs_embeds: torch.Tensor
+
+        Returns: torch.Tensor
+        """
+        input_shape = inputs_embeds.size()[:-1]
+        sequence_length = input_shape[1]
+
+        position_ids = torch.arange(
+            self.padding_idx + 1, sequence_length + self.padding_idx + 1, dtype=torch.long, device=inputs_embeds.device
+        )
+        return position_ids.unsqueeze(0).expand(input_shape)
+
+
 class RobertaDecoderLayer(nn.Module):
     def __init__(self, roberta_layer: RobertaLayer, init_context=False, ):
         super(RobertaDecoderLayer, self).__init__()
@@ -154,9 +231,16 @@ class RobertaDecoder(TransformerDecoder):
             vocab_size,
             pad_idx,
             init_context=False,
+            alignment_layer=0,
+            alignment_heads=0,
             # token_type='A',
     ):
-        super(RobertaDecoder, self).__init__()
+        super(TransformerDecoder, self).__init__(
+            d_model=768,
+            copy_attn=copy_attn,
+            embeddings=None,
+            alignment_layer=alignment_layer,
+        )
 
         # basic attributes
         self.decoder_type = 'roberta'
@@ -169,7 +253,7 @@ class RobertaDecoder(TransformerDecoder):
         self._copy = copy_attn
         self.config = RobertaConfig(vocab_size=vocab_size)
         roberta = RobertaModel(self.config)
-        self.embeddings = roberta.embeddings
+        self.embeddings = RobertaDecoderEmbeddings(roberta.embeddings)
         self.transformer_layers = nn.ModuleList([
             RobertaDecoderLayer(roberta_layer=roberta_layer, init_context=init_context)
             for roberta_layer in roberta.encoder.layer
@@ -181,7 +265,7 @@ class RobertaDecoder(TransformerDecoder):
             copy_attn=opt.copy_attn,
             vocab_size=embeddings.word_lut.weight.size(0),
             pad_idx=embeddings.word_padding_idx,
-            init_context=opt.roberta_decoder_init_context,
+            init_context=opt.bert_decoder_init_context,
             # token_type=opt.roberta_decoder_token_type,
         )
 
@@ -231,9 +315,10 @@ class RobertaDecoder(TransformerDecoder):
 
         return dec_outs, attns
 
-    def initialize_roberta(self, roberta_type):
-        roberta = RobertaModel.from_pretrained(roberta_type)
-        self.embeddings = roberta.embeddings
+    def initialize_bert(self, roberta_type):
+        roberta: RobertaModel = RobertaModel.from_pretrained(roberta_type)
+        roberta.resize_token_embeddings(self.embeddings.word_lut.num_embeddings)
+        self.embeddings = RobertaDecoderEmbeddings(roberta.embeddings)
         self.transformer_layers = nn.ModuleList([
             RobertaDecoderLayer(roberta_layer, self.init_context)
             for roberta_layer in roberta.encoder.layer

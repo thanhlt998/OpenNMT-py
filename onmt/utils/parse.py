@@ -113,9 +113,12 @@ class DataOptsCheckerMixin(object):
                     "-tgt_vocab is required if not -share_vocab."
             return
         # validation when train:
-        cls._validate_file(opt.src_vocab, info='src vocab')
-        if not opt.share_vocab:
-            cls._validate_file(opt.tgt_vocab, info='tgt vocab')
+        if opt.vocab:
+            cls._validate_file(opt.vocab, info='vocab pt file')
+        else:
+            cls._validate_file(opt.src_vocab, info='src vocab')
+            if not opt.share_vocab:
+                cls._validate_file(opt.tgt_vocab, info='tgt vocab')
 
         if opt.dump_fields or opt.dump_transforms:
             assert opt.save_data, "-save_data should be set if set \
@@ -296,3 +299,21 @@ class ArgumentParser(cfargparse.ArgumentParser, DataOptsCheckerMixin):
     @classmethod
     def validate_translate_opts(cls, opt):
         pass
+
+    @classmethod
+    def validate_preprocess_args(cls, opt):
+        assert opt.max_shard_size == 0, \
+            "-max_shard_size is deprecated. Please use \
+            -shard_size (number of examples) instead."
+        assert opt.shuffle == 0, \
+            "-shuffle is not implemented. Please shuffle \
+            your data before pre-processing."
+
+        assert os.path.isfile(opt.train_src) \
+               and os.path.isfile(opt.train_tgt), \
+            "Please check path of your train src and tgt files!"
+
+        assert not opt.valid_src or os.path.isfile(opt.valid_src), \
+            "Please check path of your valid src file!"
+        assert not opt.valid_tgt or os.path.isfile(opt.valid_tgt), \
+            "Please check path of your valid tgt file!"

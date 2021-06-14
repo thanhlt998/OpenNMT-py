@@ -1,0 +1,18 @@
+train_src: data/vi_wikisplit_200k/train_data.complex
+train_tgt: data/vi_wikisplit_200k/train_data.simple
+
+valid_src: data/vi_wikisplit_200k/val_data.complex
+valid_tgt: data/vi_wikisplit_200k/val_data.simple
+
+save_data: models/v2/split_rephrase_v1
+
+src_vocab_size: 200000
+tgt_vocab_size: 200000
+
+shard_size: 100000
+
+bert_src: vinai/phobert-base
+bert_tgt: vinai/phobert-base
+
+src_seq_length: 256
+tgt_seq_length: 256

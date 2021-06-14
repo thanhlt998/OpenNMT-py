@@ -305,8 +305,7 @@ def _build_field_vocab(field, counter, size_multiple=1, **kwargs):
     # TODO: consider code for BERT
     if 'bert_tokenizer' in field.tokenize.keywords.keys():
         vocab = field.tokenize.keywords['bert_tokenizer'].get_vocab()
-        # specials = ['<s>', '</s>', '<unk>', '<pad>', '<mask>',]
-        specials = field.tokenize.keywords['bert_tokenizer'].all_special_tokens
+        specials = ['<s>', '<pad>', '</s>', '<unk>', ]
         counter = Counter()
         src_vocab_size = len(vocab)
         logger.info(f'Bert vocab has {src_vocab_size} tokens')
@@ -315,6 +314,7 @@ def _build_field_vocab(field, counter, size_multiple=1, **kwargs):
             # keep the order of tokens specified in the vocab file by
             # adding them to the counter with decreasing counting values
             counter[token[0]] = src_vocab_size - i
+        kwargs.pop('specials', None)
         field.vocab = field.vocab_cls(counter, specials=specials, **kwargs)
     else:
         # this is basically copy-pasted from torchtext.

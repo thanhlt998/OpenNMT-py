@@ -26,30 +26,36 @@ def build_dynamic_fields(opts, src_specials=None, tgt_specials=None):
     """Build fields for dynamic, including load & build vocab."""
     fields = _get_dynamic_fields(opts)
 
-    counters = defaultdict(Counter)
-    logger.info("Loading vocab from text file...")
-
-    _src_vocab, _src_vocab_size = _load_vocab(
-        opts.src_vocab, 'src', counters,
-        min_freq=opts.src_words_min_frequency)
-
-    if opts.tgt_vocab:
-        _tgt_vocab, _tgt_vocab_size = _load_vocab(
-            opts.tgt_vocab, 'tgt', counters,
-            min_freq=opts.tgt_words_min_frequency)
-    elif opts.share_vocab:
-        logger.info("Sharing src vocab to tgt...")
-        counters['tgt'] = counters['src']
+    if opts.vocab:
+        import torch
+        vocab_fields = torch.load(opts.vocab)
+        fields['src'] = vocab_fields['src']
+        fields['tgt'] = vocab_fields['tgt']
     else:
-        raise ValueError("-tgt_vocab should be specified if not share_vocab.")
+        counters = defaultdict(Counter)
+        logger.info("Loading vocab from text file...")
 
-    logger.info("Building fields with vocab in counters...")
-    fields = _build_fields_vocab(
-        fields, counters, 'text', opts.share_vocab,
-        opts.vocab_size_multiple,
-        opts.src_vocab_size, opts.src_words_min_frequency,
-        opts.tgt_vocab_size, opts.tgt_words_min_frequency,
-        src_specials=src_specials, tgt_specials=tgt_specials)
+        _src_vocab, _src_vocab_size = _load_vocab(
+            opts.src_vocab, 'src', counters,
+            min_freq=opts.src_words_min_frequency)
+
+        if opts.tgt_vocab:
+            _tgt_vocab, _tgt_vocab_size = _load_vocab(
+                opts.tgt_vocab, 'tgt', counters,
+                min_freq=opts.tgt_words_min_frequency)
+        elif opts.share_vocab:
+            logger.info("Sharing src vocab to tgt...")
+            counters['tgt'] = counters['src']
+        else:
+            raise ValueError("-tgt_vocab should be specified if not share_vocab.")
+
+        logger.info("Building fields with vocab in counters...")
+        fields = _build_fields_vocab(
+            fields, counters, 'text', opts.share_vocab,
+            opts.vocab_size_multiple,
+            opts.src_vocab_size, opts.src_words_min_frequency,
+            opts.tgt_vocab_size, opts.tgt_words_min_frequency,
+            src_specials=src_specials, tgt_specials=tgt_specials)
 
     return fields
 

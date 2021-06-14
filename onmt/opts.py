@@ -121,7 +121,8 @@ def _add_dynamic_fields_opts(parser, build_vocab_only=False):
     related options which won't be used in `bin/build_vocab.py`.
     """
     group = parser.add_argument_group("Vocab")
-    group.add("-src_vocab", "--src_vocab", required=True,
+    group.add("-vocab", "--vocab", help="Vocab pt files including src and tgt vocab fields.")
+    group.add("-src_vocab", "--src_vocab", required=False,
               help=("Path to save" if build_vocab_only else "Path to")
               + " src (or shared) vocabulary file. "
               "Format: one <word> or <word>\t<count> per line.")
@@ -159,11 +160,11 @@ def _add_dynamic_fields_opts(parser, build_vocab_only=False):
                   type=int, default=None,
                   help="Truncate target sequence length.")
 
-        group.add('--src_seq_length', '-src_seq_length', type=int, default=100,
-                  help="Maximum source sequence length")
-
-        group.add('--tgt_seq_length', '-tgt_seq_length', type=int, default=100,
-                  help="Maximum target sequence length")
+        # group.add('--src_seq_length', '-src_seq_length', type=int, default=100,
+        #           help="Maximum source sequence length")
+        #
+        # group.add('--tgt_seq_length', '-tgt_seq_length', type=int, default=100,
+        #           help="Maximum target sequence length")
 
         group.add('--lower', '-lower', action='store_true', help="Lowercase data",)
         group.add('--filter_valid', '-filter_valid', action='store_true',
@@ -286,12 +287,12 @@ def model_opts(parser):
 
     group.add('--encoder_type', '-encoder_type', type=str, default='rnn',
               choices=['rnn', 'brnn', 'ggnn', 'mean', 'transformer', 'cnn',
-                       'transformer_lm', 'roberta', ],
+                       'transformer_lm', 'bert', ],
               help="Type of encoder layer to use. Non-RNN layers "
                    "are experimental. Options are "
                    "[rnn|brnn|ggnn|mean|transformer|cnn|transformer_lm].")
     group.add('--decoder_type', '-decoder_type', type=str, default='rnn',
-              choices=['rnn', 'transformer', 'cnn', 'transformer_lm', 'roberat', ],
+              choices=['rnn', 'transformer', 'cnn', 'transformer_lm', 'bert', ],
               help="Type of decoder layer to use. Non-RNN layers "
                    "are experimental. Options are "
                    "[rnn|transformer|cnn|transformer].")

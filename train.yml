@@ -1,0 +1,59 @@
+save_model: ape-model
+
+data: prep-data
+train_steps: 50000
+start_decay_steps: 50000
+valid_steps: 1000
+save_checkpoint_steps: 1000
+keep_checkpoint: 30
+
+# Dimensionality
+rnn_size: 768 #!
+word_vec_size: 768 #!
+transformer_ff: 3072 #!
+heads: 12 #!
+layers: 12 #!
+
+# Embeddings
+position_encoding: 'true' #!
+share_embeddings: 'true' #!
+share_decoder_embeddings: 'true' #!
+
+# Encoder
+encoder_type: bert #!
+enc_bert_type: bert-base-multilingual-cased #!
+
+# Decoder
+decoder_type: bert #!
+dec_bert_type: bert-base-multilingual-cased #!
+bert_decoder_token_type: B #!
+
+# Layer Sharing
+bert_decoder_init_context: 'true'
+share_self_attn: 'true'
+# tie_context_attn: 'true'
+# share_feed_forward: 'true'
+
+# Regularization
+dropout: 0.1
+label_smoothing: 0.1
+
+# Optimization
+optim: bertadam #!
+learning_rate: 0.00005
+warmup_steps: 5000
+batch_type: tokens
+normalization: tokens
+accum_count: 2
+batch_size: 512
+max_grad_norm: 0
+param_init: 0
+param_init_glorot: 'true'
+valid_batch_size: 8
+
+average_decay: 0.0001
+
+# GPU
+seed: 42
+world_size: 1
+gpu_ranks: 0

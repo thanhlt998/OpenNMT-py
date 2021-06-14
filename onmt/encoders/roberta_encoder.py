@@ -8,46 +8,84 @@ from typing import Tuple, Optional
 from onmt.encoders.encoder import EncoderBase
 
 
-# class RobertaEncoderEmbeddings(nn.Module):
-#     """Construct the embeddings from word, position and token_type embeddings.
-#     """
-#     def __init__(self, roberta_embeddings: RobertaEmbeddings):
-#         super(RobertaEncoderEmbeddings, self).__init__()
-#         self.word_lut = roberta_embeddings.word_embeddings
-#         self.position_embeddings = roberta_embeddings.position_embeddings
-#         self.token_type_embeddings = roberta_embeddings.token_type_embeddings
-#
-#         self.LayerNorm = roberta_embeddings.LayerNorm
-#         self.dropout = roberta_embeddings.dropout
-#
-#     def forward(self, input_ids, token_type_ids):
-#         seq_length = input_ids.size(1)
-#         position_ids = torch.arange(
-#             seq_length,
-#             dtype=torch.long,
-#             device=input_ids.device)
-#         position_ids = position_ids.unsqueeze(0).expand_as(input_ids)
-#
-#         # The point of this code block is to reset the position ids
-#         # for sentence B (token_type_id=1)
-#         token_type = (token_type_ids > 0)
-#         position_aux = \
-#             ((token_type.cumsum(1) == 1) & token_type).max(1)[1].unsqueeze(1)
-#         position_aux = position_aux * token_type_ids.clone()
-#         position_ids = position_ids - position_aux
-#
-#         words_embeddings = self.word_lut(input_ids)
-#         position_embeddings = self.position_embeddings(position_ids)
-#         token_type_embeddings = self.token_type_embeddings(token_type_ids)
-#
-#         embeddings = \
-#             words_embeddings + position_embeddings + token_type_embeddings
-#         embeddings = self.LayerNorm(embeddings)
-#         embeddings = self.dropout(embeddings)
-#         return embeddings
+def create_position_ids_from_input_ids(input_ids, padding_idx, past_key_values_length=0):
+    """
+    Replace non-padding symbols with their position numbers. Position numbers begin at padding_idx+1. Padding symbols
+    are ignored. This is modified from fairseq's `utils.make_positions`.
+
+    Args:
+        x: torch.Tensor x:
+
+    Returns: torch.Tensor
+    """
+    # The series of casts and type-conversions here are carefully balanced to both work with ONNX export and XLA.
+    mask = input_ids.ne(padding_idx).int()
+    incremental_indices = (torch.cumsum(mask, dim=1).type_as(mask) + past_key_values_length) * mask
+    return incremental_indices.long() + padding_idx
 
 
-class BERTEncoder(EncoderBase):
+class RobertaEncoderEmbeddings(nn.Module):
+    def __init__(self, roberta_embeddings: RobertaEmbeddings):
+        super(RobertaEncoderEmbeddings, self).__init__()
+        self.word_lut = roberta_embeddings.word_embeddings
+        self.position_embeddings = roberta_embeddings.position_embeddings
+        self.token_type_embeddings = roberta_embeddings.token_type_embeddings
+
+        self.LayerNorm = roberta_embeddings.LayerNorm
+        self.dropout = roberta_embeddings.dropout
+        self.padding_idx = roberta_embeddings.padding_idx
+
+    def forward(
+            self, input_ids=None, token_type_ids=None, position_ids=None, inputs_embeds=None, past_key_values_length=0
+    ):
+        if position_ids is None:
+            if input_ids is not None:
+                # Create the position ids from the input token ids. Any padded tokens remain padded.
+                position_ids = create_position_ids_from_input_ids(
+                    input_ids, self.padding_idx, past_key_values_length
+                ).to(input_ids.device)
+            else:
+                position_ids = self.create_position_ids_from_inputs_embeds(inputs_embeds)
+
+        if input_ids is not None:
+            input_shape = input_ids.size()
+        else:
+            input_shape = inputs_embeds.size()[:-1]
+
+        if token_type_ids is None:
+            token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=self.position_ids.device)
+
+        if inputs_embeds is None:
+            inputs_embeds = self.word_lut(input_ids)
+        token_type_embeddings = self.token_type_embeddings(token_type_ids)
+
+        embeddings = inputs_embeds + token_type_embeddings
+        if self.position_embedding_type == "absolute":
+            position_embeddings = self.position_embeddings(position_ids)
+            embeddings += position_embeddings
+        embeddings = self.LayerNorm(embeddings)
+        embeddings = self.dropout(embeddings)
+        return embeddings
+
+    def create_position_ids_from_inputs_embeds(self, inputs_embeds):
+        """
+        We are provided embeddings directly. We cannot infer which are padded so just generate sequential position ids.
+
+        Args:
+            inputs_embeds: torch.Tensor
+
+        Returns: torch.Tensor
+        """
+        input_shape = inputs_embeds.size()[:-1]
+        sequence_length = input_shape[1]
+
+        position_ids = torch.arange(
+            self.padding_idx + 1, sequence_length + self.padding_idx + 1, dtype=torch.long, device=inputs_embeds.device
+        )
+        return position_ids.unsqueeze(0).expand(input_shape)
+
+
+class RobertaEncoder(EncoderBase):
     """
     Returns:
         (`FloatTensor`, `FloatTensor`):
@@ -57,10 +95,10 @@ class BERTEncoder(EncoderBase):
     """
 
     def __init__(self, vocab_size, pad_idx):
-        super(BERTEncoder, self).__init__()
+        super(RobertaEncoder, self).__init__()
         self.config = RobertaConfig(vocab_size=vocab_size, pad_token_id=pad_idx,)
         roberta = RobertaModel(self.config)
-        self.embeddings = roberta.embeddings
+        self.embeddings = RobertaEncoderEmbeddings(roberta.embeddings)
         self.encoder = roberta.encoder
 
         self.pad_idx = pad_idx
@@ -220,9 +258,9 @@ class BERTEncoder(EncoderBase):
         return head_mask
 
     def initialize_bert(self, bert_type):
+        roberta: RobertaModel = RobertaModel.from_pretrained(bert_type)
+        roberta.resize_token_embeddings(self.embeddings.word_lut.num_embeddings)
 
-        roberta = RobertaModel.from_pretrained(bert_type)
-
-        self.embeddings = roberta.embeddings
+        self.embeddings = RobertaEncoderEmbeddings(roberta.embeddings)
 
         self.encoder = roberta.encoder

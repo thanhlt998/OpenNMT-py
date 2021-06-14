@@ -1,0 +1,97 @@
+# train.yaml
+
+## Where the samples will be written
+#save_data: models/v2/split_rephrase_v1
+## Where the vocab(s) will be written
+#src_vocab: models/v2/split_rephrase_v1.vocab.src
+#tgt_vocab: models/v2/split_rephrase_v1.vocab.tgt
+#share_vocab: True
+vocab: models/v2/split_rephrase_v1.vocab.pt
+src_seq_length: 256
+tgt_seq_length: 256
+#src_seq_length_trunc: 256
+#tgt_seq_length_trunc: 256
+#bert_src: vinai/phobert-base
+#bert_tgt: vinai/phobert-base
+#shard_size: 100000
+#src_vocab_size: 200000
+#tgt_vocab_size: 200000
+# Prevent overwriting existing files in the folder
+overwrite: False
+
+# log
+log_file: models/v2/log/viwikisplit_bert.log
+
+# Corpus opts:
+data:
+  corpus_1:
+    path_src: data/vi_wikisplit_200k/train_data.complex
+    path_tgt: data/vi_wikisplit_200k/train_data.simple
+  valid:
+    path_src: data/vi_wikisplit_200k/val_data.complex
+    path_tgt: data/vi_wikisplit_200k/val_data.simple
+#data: models/v2/split_rephrase_v1
+
+# Save model
+save_model: models/v2/checkpoints/viwikisplit_bert
+
+# Model options
+
+# Dimensionality
+rnn_size: 768
+word_vec_size: 768
+feat_vec_size: 2048
+transformer_ff: 3072
+heads: 12
+layers: 12
+
+# Embeddings
+position_encoding: True
+share_embeddings: True
+share_decoder_embeddings: True
+
+# Encoder
+encoder_type: bert
+enc_bert_type: vinai/phobert-base
+
+# Decoder
+decoder_type: bert
+dec_bert_type: vinai/phobert-base
+bert_decoder_token_type: B
+
+# Layer Sharing
+bert_decoder_init_context: True
+share_self_attn: True
+# tie_context_attn: True
+# share_feed_forward: True
+
+# Regularization
+dropout: 0.1
+label_smoothing: 0.1
+
+# Optimization
+optim: bertadam
+learning_rate: 0.00005
+warmup_steps: 5000
+batch_type: tokens
+normalization: tokens
+accum_count: 2
+batch_size: 8
+max_grad_norm: 0
+param_init: 0
+param_init_glorot: True
+valid_batch_size: 8
+
+average_decay: 0.0001
+
+# Train
+train_steps: 50000
+start_decay_steps: 50000
+valid_steps: 1000
+save_checkpoint_steps: 1000
+keep_checkpoint: 30
+
+# Train on a single GPU
+world_size: 1
+gpu_ranks: [0]
+report_every: 500
