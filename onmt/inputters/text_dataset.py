@@ -70,7 +70,7 @@ def _feature_tokenize(
 
 def _bert_tokenize(string, layer=0, truncate=None, bert_tokenizer: RobertaTokenizer = None,):
     tokens = bert_tokenizer.tokenize(string)
-    segments_ids = [0] * len(tokens)
+    segments_ids = [0] * (len(tokens) + 2)
     if layer == 1:
         tokens = segments_ids
     return tokens
