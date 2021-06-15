@@ -1,0 +1,41 @@
+# translate.yaml
+
+share_vocab: True
+model: models/v2/checkpoints/viwikisplit_bert_step_18000.pt
+src_seq_length: 256
+tgt_seq_length: 256
+src_seq_length_trunc: 256
+tgt_seq_length_trunc: 256
+
+# Dimensionality
+rnn_size: 768
+word_vec_size: 768
+feat_vec_size: 2048
+transformer_ff: 3072
+heads: 12
+layers: 12
+
+# Embeddings
+position_encoding: True
+share_embeddings: True
+share_decoder_embeddings: True
+
+# Encoder
+encoder_type: bert
+enc_bert_type: vinai/phobert-base
+
+# Decoder
+decoder_type: bert
+dec_bert_type: vinai/phobert-base
+bert_decoder_token_type: B
+
+# Layer Sharing
+bert_decoder_init_context: True
+share_self_attn: True
+tie_context_attn: True
+share_feed_forward: True
+copy_attn: True
+
+gpu: 0
+output: data/vi_wikisplit_200k/test_data.simple.pred
+src: data/vi_wikisplit_200k/test_data.complex

@@ -668,7 +668,7 @@ def _add_train_general_opts(parser):
               help="Decay every decay_steps")
 
     group.add('--decay_method', '-decay_method', type=str, default="none",
-              choices=['noam', 'noamwd', 'rsqrt', 'none'],
+              choices=['noam', 'noamwd', 'rsqrt', 'linear_warmup', 'none'],
               help="Use a custom decay rate.")
     group.add('--warmup_steps', '-warmup_steps', type=int, default=4000,
               help="Number of warmup steps for custom decay.")
@@ -790,6 +790,8 @@ def _add_decoding_opts(parser):
 
 def translate_opts(parser):
     """ Translation / inference options """
+    model_opts(parser)
+    _add_dynamic_fields_opts(parser)
     group = parser.add_argument_group('Model')
     group.add('--model', '-model', dest='models', metavar='MODEL',
               nargs='+', type=str, default=[], required=True,
@@ -835,6 +837,12 @@ def translate_opts(parser):
               help="Report alignment for each translation.")
     group.add('--report_time', '-report_time', action='store_true',
               help="Report some translation time metrics")
+    #
+    # # Options most relevant to summarization.
+    # group.add('--dynamic_dict', '-dynamic_dict', action='store_true',
+    #           help="Create dynamic dictionaries")
+    # group.add('--share_vocab', '-share_vocab', action='store_true',
+    #           help="Share source and target vocabulary")
 
     # Adding options relate to decoding strategy
     _add_decoding_opts(parser)

@@ -68,8 +68,8 @@ def _feature_tokenize(
     return tokens
 
 
-def _bert_tokenize(string, layer=0, truncate=None, bert_tokenizer: RobertaTokenizer = None,):
-    tokens = bert_tokenizer.tokenize(string)
+def _bert_tokenize(string, layer=0, truncate=None, bert_tokenizer: RobertaTokenizer = None, max_len=256,):
+    tokens = bert_tokenizer.tokenize(string)[:max_len - 2]
     segments_ids = [0] * (len(tokens) + 2)
     if layer == 1:
         tokens = segments_ids

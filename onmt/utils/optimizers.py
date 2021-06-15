@@ -144,6 +144,12 @@ def make_learning_rate_decay_fn(opt):
     elif opt.decay_method == 'rsqrt':
         return functools.partial(
             rsqrt_decay, warmup_steps=opt.warmup_steps)
+    elif opt.decay_method == 'linear_warmup':
+        return functools.partial(
+            linear_warmup,
+            warmup_steps=opt.warmup_steps,
+            train_steps=opt.train_steps,
+        )
     elif opt.start_decay_steps is not None:
         return functools.partial(
             exponential_decay,
@@ -181,6 +187,14 @@ def exponential_decay(step, rate, decay_steps, start_step=0):
 def rsqrt_decay(step, warmup_steps):
     """Decay based on the reciprocal of the step square root."""
     return 1.0 / sqrt(max(step, warmup_steps))
+
+
+def linear_warmup(step, warmup_steps, train_steps):
+    if step < warmup_steps:
+        return float(step) / float(max(1, warmup_steps))
+    return max(
+        0.0, float(train_steps - step) / float(max(1, train_steps - warmup_steps))
+    )
 
 
 class MultipleOptimizer(object):

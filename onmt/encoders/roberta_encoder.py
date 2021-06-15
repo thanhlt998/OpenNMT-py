@@ -118,12 +118,11 @@ class RobertaEncoder(EncoderBase):
         self._check_args(src, lengths)
 
         # bert receives a tensor of shape [batch_size x src_len]
-        segments_ids = src[:, :, 1].t()
         input_ids = src[:, :, 0].t()
         input_shape = input_ids.size()
         device = input_ids.device
 
-        attention_mask = input_ids != self.pad_idx
+        attention_mask = (input_ids != self.pad_idx).type(torch.int)
         token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
 
         # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
@@ -260,6 +259,7 @@ class RobertaEncoder(EncoderBase):
         return head_mask
 
     def initialize_bert(self, bert_type):
+        print(f"Loading pretrained bert {bert_type}")
         roberta: RobertaModel = RobertaModel.from_pretrained(bert_type)
         roberta.resize_token_embeddings(self.embeddings.word_lut.num_embeddings)
 

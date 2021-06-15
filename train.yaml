@@ -9,8 +9,8 @@
 vocab: models/v2/split_rephrase_v1.vocab.pt
 src_seq_length: 256
 tgt_seq_length: 256
-#src_seq_length_trunc: 256
-#tgt_seq_length_trunc: 256
+src_seq_length_trunc: 256
+tgt_seq_length_trunc: 256
 #bert_src: vinai/phobert-base
 #bert_tgt: vinai/phobert-base
 #shard_size: 100000
@@ -22,15 +22,8 @@ overwrite: False
 # log
 log_file: models/v2/log/viwikisplit_bert.log
 
-# Corpus opts:
-data:
-  corpus_1:
-    path_src: data/vi_wikisplit_200k/train_data.complex
-    path_tgt: data/vi_wikisplit_200k/train_data.simple
-  valid:
-    path_src: data/vi_wikisplit_200k/val_data.complex
-    path_tgt: data/vi_wikisplit_200k/val_data.simple
-#data: models/v2/split_rephrase_v1
+# Source
+src: data/vi_wikisplit_200k/test_data.complex
 
 # Save model
 save_model: models/v2/checkpoints/viwikisplit_bert
@@ -40,7 +33,7 @@ save_model: models/v2/checkpoints/viwikisplit_bert
 # Dimensionality
 rnn_size: 768
 word_vec_size: 768
-feat_vec_size: 2048
+#feat_vec_size: 2048
 transformer_ff: 3072
 heads: 12
 layers: 12
@@ -62,37 +55,7 @@ bert_decoder_token_type: B
 # Layer Sharing
 bert_decoder_init_context: True
 share_self_attn: True
-# tie_context_attn: True
-# share_feed_forward: True
+tie_context_attn: True
+share_feed_forward: True
 copy_attn: True
 
-# Regularization
-dropout: 0.1
-label_smoothing: 0.1
-
-# Optimization
-optim: bertadam
-learning_rate: 0.00005
-warmup_steps: 5000
-batch_type: sents
-normalization: sents
-accum_count: 2
-batch_size: 8
-max_grad_norm: 0
-param_init: 0
-param_init_glorot: True
-valid_batch_size: 8
-
-average_decay: 0.0001
-
-# Train
-train_steps: 50000
-start_decay_steps: 50000
-valid_steps: 1000
-save_checkpoint_steps: 1000
-keep_checkpoint: 30
-
-# Train on a single GPU
-world_size: 1
-gpu_ranks: [0]
-report_every: 500

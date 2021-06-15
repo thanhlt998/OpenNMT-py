@@ -7,7 +7,7 @@ import numpy as np
 import onmt
 import copy
 
-MAX_SIZE = 512
+MAX_SIZE = 256
 
 
 def clone_or_share_layer(layer1, layer2, share=False):
@@ -313,7 +313,7 @@ class RobertaDecoder(TransformerDecoder):
 
         # Process the result and update the attentions.
         dec_outs = output.transpose(0, 1).contiguous()
-        attn = torch.mean(attn, dim=1,).transpose(0, 1).contiguous()
+        attn = attn[:, 0, :, :].transpose(0, 1).contiguous()
 
         attns = {"std": attn}
         if self._copy:
@@ -322,6 +322,7 @@ class RobertaDecoder(TransformerDecoder):
         return dec_outs, attns
 
     def initialize_bert(self, roberta_type):
+        print(f"Loading pretrained bert {roberta_type}")
         roberta: RobertaModel = RobertaModel.from_pretrained(roberta_type)
         roberta.resize_token_embeddings(self.embeddings.word_lut.num_embeddings)
         self.embeddings = RobertaDecoderEmbeddings(roberta.embeddings)

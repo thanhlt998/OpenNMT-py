@@ -306,15 +306,24 @@ def build_base_model(model_opt, fields, gpu, checkpoint=None, gpu_id=None):
             model_opt.enc_bert_type = model_opt.bert_type
             model_opt.dec_bert_type = model_opt.bert_type
 
-        if model_opt.enc_bert_type != 'none' and checkpoint is None:
+        if model_opt.enc_bert_type != 'none':
             model.encoder.initialize_bert(model_opt.enc_bert_type)
 
-        if model_opt.dec_bert_type != 'none' and checkpoint is None:
+        if model_opt.dec_bert_type != 'none':
             model.decoder.initialize_bert(model_opt.dec_bert_type)
 
         # Tie word embedding layer of bert encoder and decoder
         if model_opt.encoder_type == 'bert' and model_opt.share_embeddings:
             model.decoder.embeddings.word_lut.weight = model.encoder.embeddings.word_lut.weight
+
+        # Tie decoder word embedding layer with generator weights
+        if model_opt.share_decoder_embeddings:
+            if not model_opt.copy_attn:
+                generator[0].weight = \
+                    model.decoder.embeddings.word_lut.weight
+            else:
+                generator.linear.weight = \
+                    model.decoder.embeddings.word_lut.weight
 
     if model_opt.encoder_type == 'bert' and model_opt.decoder_type == 'bert':
         # Tie word, position and token_type embedding
@@ -356,6 +365,33 @@ def build_base_model(model_opt, fields, gpu, checkpoint=None, gpu_id=None):
                     encoder_layer.attention.output.dense,
                     share=True,
                 )
+
+        # Tie context-attention with self-attention
+        if model_opt.tie_context_attn:
+            for decoder_layer in model.decoder.transformer_layers:
+                # QUERY
+                clone_or_share_layer(
+                    decoder_layer.context_attn.linear_query,
+                    decoder_layer.self_attn.linear_query,
+                    share=True)
+
+                # KEY
+                clone_or_share_layer(
+                    decoder_layer.context_attn.linear_keys,
+                    decoder_layer.self_attn.linear_keys,
+                    share=True)
+
+                # VALUE
+                clone_or_share_layer(
+                    decoder_layer.context_attn.linear_values,
+                    decoder_layer.self_attn.linear_values,
+                    share=True)
+
+                # MULTIHEAD ATTN FINAL LINEAR LAYER
+                clone_or_share_layer(
+                    decoder_layer.context_attn.final_linear,
+                    decoder_layer.self_attn.final_linear,
+                    share=True)
 
         # Tie positionwise feedforward between encoder and decoder
         if model_opt.share_feed_forward:
